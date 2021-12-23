@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import requests
 import time
+from tqdm.notebook import tqdm_notebook
 
 class IMF_API():
     url = 'http://dataservices.imf.org/REST/SDMX_JSON.svc'
@@ -77,11 +78,14 @@ class IMF_API():
             print(f'Server denied the request: {indicator} for {country}')
         if 'Series' in res_text:
             if 'Obs'in res_text['Series']:
-                data = pd.DataFrame(res_text['Series']['Obs']).iloc[:,:2]
-                data.columns = ['Date', indicator_name]
-                data = data.set_index(pd.to_datetime(data['Date']))[indicator_name].astype('float')
-                data.name = indicator_name
-                return data
+                try:
+                    data = pd.DataFrame(res_text['Series']['Obs']).iloc[:,:2]
+                    data.columns = ['Date', indicator_name]
+                    data = data.set_index(pd.to_datetime(data['Date']))[indicator_name].astype('float')
+                    data.name = indicator_name
+                    return data
+                except:
+                    pass
         return None
 
     def search_data_availability(self, search, countries, startYear, endYear, frequency='A', sleep_time=1):
@@ -90,8 +94,8 @@ class IMF_API():
             print(f'Search term "{search}" was not found in the {self.database} database.')
             return None
         search_results = []
-        for country in countries:
-            for indicator in indicator_results['@value'].values:
+        for country in tqdm_notebook(countries, leave=True, desc = f'All countries, progress'):
+            for indicator in tqdm_notebook(indicator_results['@value'].values, leave=False, desc = f'{country}'):
                 query = {'indicator':indicator, 'country':country, 'startYear':startYear, 'endYear':endYear, 'frequency':frequency, 'sleep_time':sleep_time}
                 data = self.get_series(**query)
                 data = f'{data.index[0].year}-{data.index[-1].year}' if data is not None else 'N/A'
@@ -102,9 +106,9 @@ class IMF_API():
 
     def get_indicators(self, indicators, countries, startYear, endYear, frequency='A', sleep_time=1):
         dataset = []
-        for country in countries:
+        for country in tqdm_notebook(countries, leave=True, desc = f'All countries, progress'):
             subset = []
-            for indicator in indicators:
+            for indicator in tqdm_notebook(indicators, leave=False, desc = f'{country}'):
                 data = self.get_series(indicator, country, startYear, endYear, frequency, sleep_time=sleep_time)
                 try:
                     data.name = ','.join(data.name.split(',')[-2:])
