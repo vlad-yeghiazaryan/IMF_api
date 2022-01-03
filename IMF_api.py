@@ -34,7 +34,7 @@ class IMF_API():
         res = requests.get(query)
         res.raise_for_status()
         dataStructure = pd.DataFrame(res.json()['Structure']['KeyFamilies']['KeyFamily']['Components']['Dimension'])
-        time.sleep(2) # 2 seconds is enough
+        time.sleep(5) # 2 seconds is enough
         dimensions = list(dataStructure['@codelist'])
         codes = [requests.get(f'{IMF_API.url}/CodeList/{dimension}').json()['Structure']['CodeLists']['CodeList']['Code'] for dimension in dimensions]
         code_list = {}
@@ -121,5 +121,8 @@ class IMF_API():
                 dataset.append(subset)
             except:
                 dataset.append(None)
-        dataset = pd.concat(dataset)
+        try:
+            dataset = pd.concat(dataset)
+        except:
+            dataset = None
         return dataset
