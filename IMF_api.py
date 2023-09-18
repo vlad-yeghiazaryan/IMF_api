@@ -36,12 +36,16 @@ class IMF_API():
         dataStructure = pd.DataFrame(res.json()['Structure']['KeyFamilies']['KeyFamily']['Components']['Dimension'])
         time.sleep(5) # 2 seconds is enough
         dimensions = list(dataStructure['@codelist'])
-        codes = [requests.get(f'{IMF_API.url}/CodeList/{dimension}').json()['Structure']['CodeLists']['CodeList']['Code'] for dimension in dimensions]
+        
+        # extracting code data
+        code_urls = [f'{IMF_API.url}/CodeList/{dimension}' for dimension in dimensions]
+        code_urls = dict(zip(dataStructure['@conceptRef'], code_urls))
+        codes = {name: r.json()['Structure']['CodeLists']['CodeList']['Code'] for name, url in code_urls.items() if (r := requests.get(url)).ok}
+
         code_list = {}
-        for index, code in enumerate(codes):
+        for name, code in codes.items():
             codes_table = pd.concat([pd.DataFrame(code).drop('Description', axis=1), pd.json_normalize(pd.DataFrame(code).Description)], axis=1)
-            key = dataStructure['@conceptRef'][index]
-            code_list.update({key:codes_table})
+            code_list.update({name:codes_table})
         return code_list
 
     def get_country_code(self, country_name):
