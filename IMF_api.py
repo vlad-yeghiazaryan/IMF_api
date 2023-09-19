@@ -93,7 +93,7 @@ class IMF_API():
         return None
 
     def search_data_availability(self, search, countries, startYear, endYear, frequency='A', sleep_time=1):
-        indicator_results = self.indicator_search(search)
+        indicator_results = self.indicator_search(search) if type(search)==str else search
         if len(indicator_results) == 0:
             print(f'Search term "{search}" was not found in the {self.database} database.')
             return None
