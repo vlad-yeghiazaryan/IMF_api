@@ -115,7 +115,6 @@ class IMF_API():
             for indicator in tqdm_notebook(indicators, leave=False, desc = f'{country}'):
                 data = self.get_series(indicator, country, startYear, endYear, frequency, sleep_time=sleep_time)
                 try:
-                    data.name = ','.join(data.name.split(',')[-2:])
                     subset.append(data)
                 except:
                     subset.append(None) 
