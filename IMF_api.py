@@ -112,8 +112,8 @@ class IMF_API():
     def get_series(self, indicator, country, startYear, endYear, frequency='A'):
         country_code = self.get_country_code(country) if type(country)==str else '+'.join([self.get_country_code(c) for c in country])
         indicator = indicator if type(indicator)==str else '+'.join(indicator)
-        query = f'{IMF_API.url}/{IMF_API.query_method}/{self.database}/{frequency}.{country_code}.{indicator}?startPeriod={startYear}&endPeriod={endYear}'
-        data = self.get_data(query)
+        self.query = f'{IMF_API.url}/{IMF_API.query_method}/{self.database}/{frequency}.{country_code}.{indicator}?startPeriod={startYear}&endPeriod={endYear}'
+        data = self.get_data(self.query)
         if type(data)!=type(None):
             data.rename(columns={col:self.get_indicator_name(col) for col in data.columns}, inplace=True)
         return data
