@@ -49,7 +49,7 @@ class IMF_API():
         return code_list
 
     def get_country_code(self, country_name):
-        matches = list(self.code_list['REF_AREA'][self.code_list['REF_AREA']['#text'].str.lower() == country_name.lower()]['@value'])
+        matches = list(self.code_list['REF_AREA'][self.code_list['REF_AREA']['#text'].str.lower().strip() == country_name.lower().strip()]['@value'])
         if len(matches) == 0:
             return None
         else:
