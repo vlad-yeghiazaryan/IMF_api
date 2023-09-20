@@ -83,6 +83,8 @@ class IMF_API():
 
     def format_series(self, series):
         column_names = {'@TIME_PERIOD':'date', '@OBS_VALUE':series['@INDICATOR']}
+        if 'Obs' not in series:
+            return None
         data_series = pd.DataFrame(series['Obs']).rename(columns=column_names)[column_names.values()]
         data_series['date'] = self._handle_date_format(data_series['date'], series['@FREQ'])
         data_series[series['@INDICATOR']] = data_series[series['@INDICATOR']].astype('float')
