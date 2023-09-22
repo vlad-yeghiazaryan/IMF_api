@@ -1,6 +1,10 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
+import re
+from functools import reduce
 import requests
+import time
+from tqdm.notebook import tqdm
 import warnings
 
 class IMF_API():
@@ -8,18 +12,19 @@ class IMF_API():
     query_method = 'CompactData'
     collection = 'Dataflow'
     databaseInfo = 'DataStructure'
+    max_query_size = 355
 
     def __init__(self, database):
         self.database = database
         self.code_list = self.get_code_list()
-    
+
     def database_search(self, query):
         dataflow = pd.DataFrame(requests.get(f'{IMF_API.url}/{IMF_API.collection}').json()['Structure']['Dataflows']['Dataflow'])
-        dataflow = pd.concat([dataflow.drop(['Name', 'KeyFamilyRef'], axis=1), pd.json_normalize(dataflow.Name), 
+        dataflow = pd.concat([dataflow.drop(['Name', 'KeyFamilyRef'], axis=1), pd.json_normalize(dataflow.Name),
                               pd.json_normalize(dataflow.KeyFamilyRef)], axis=1)
         results = dataflow['#text'][dataflow['#text'].str.lower().str.contains(query.lower())].reset_index()['#text']
         return results
-    
+
     def indicator_search(self, query):
         base = r'^{}'
         expr = '(?=.*{})'
@@ -32,9 +37,13 @@ class IMF_API():
         query = f'{IMF_API.url}/{IMF_API.databaseInfo}/{self.database}'
         res = requests.get(query)
         res.raise_for_status()
-        dataStructure = pd.DataFrame(res.json()['Structure']['KeyFamilies']['KeyFamily']['Components']['Dimension'])
-        dimensions = list(dataStructure['@codelist'])
-        
+        try:
+            dataStructure = pd.DataFrame(res.json()['Structure']['KeyFamilies']['KeyFamily']['Components']['Dimension'])
+            dimensions = list(dataStructure['@codelist'])
+        except:
+            warnings.warn(f'Failed to retrieve the code list. Please try again.', UserWarning)
+            return {}
+
         # extracting code data
         code_urls = [f'{IMF_API.url}/CodeList/{dimension}' for dimension in dimensions]
         code_urls = dict(zip(dataStructure['@conceptRef'], code_urls))
@@ -83,13 +92,15 @@ class IMF_API():
         column_names = {'@TIME_PERIOD':'date', '@OBS_VALUE':series['@INDICATOR']}
         if 'Obs' not in series:
             return None
+        if type(series['Obs'])==dict:
+            series['Obs'] = [series['Obs']]
         data_series = pd.DataFrame(series['Obs']).rename(columns=column_names)[column_names.values()]
-        data_series.loc[:, 'date'] = self._handle_date_format(data_series['date'], series['@FREQ'])
-        data_series.loc[:, series['@INDICATOR']] = data_series[series['@INDICATOR']].astype('float').copy()
+        data_series['date'] = self._handle_date_format(data_series['date'], series['@FREQ'])
+        data_series[series['@INDICATOR']] = data_series[series['@INDICATOR']].astype('float').copy()
         data_series['country'] = series['@REF_AREA']
         data_series = data_series.set_index(['date', 'country'])
         return data_series
-    
+
     def get_data(self, query):
         try:
             res = requests.get(query)
@@ -98,8 +109,8 @@ class IMF_API():
             res_text = []
             warning_text = 'Server denied the request.'
             ql = len(query)
-            if ql > 355:
-                warning_text+= f' The query length of {ql} exceeds the the maximum limit of 355. Please try reducing the number of variables or countries per request.'
+            if ql > IMF_API.max_query_size:
+                warning_text+= f' The query length of {ql} exceeds the the maximum limit of {IMF_API.max_query_size}. Please try reducing the number of variables or countries per request.'
             warnings.warn(warning_text, UserWarning)
         if 'Series' in res_text:
             res_series = res_text['Series']
@@ -113,11 +124,55 @@ class IMF_API():
             return data
         return None
 
-    def get_series(self, indicator, country, startYear, endYear, frequency='A'):
-        country_code = self.get_country_code(country) if type(country)==str else '+'.join([self.get_country_code(c) for c in country])
-        indicator = indicator if type(indicator)==str else '+'.join(indicator)
-        self.query = f'{IMF_API.url}/{IMF_API.query_method}/{self.database}/{frequency}.{country_code}.{indicator}?startPeriod={startYear}&endPeriod={endYear}'
-        data = self.get_data(self.query)
+    def make_query(self, country_codes, indicators, startYear, endYear, frequency):
+        country_codes_text = '+'.join(country_codes)
+        indicators_text = '+'.join(indicators)
+        query = f'{IMF_API.url}/{IMF_API.query_method}/{self.database}/{frequency}.{country_codes_text}.{indicators_text}?startPeriod={startYear}&endPeriod={endYear}'
+        return query
+
+    def make_queries(self, indicator, country, startYear, endYear, frequency):
+        country_codes = [self.get_country_code(country)] if type(country)==str else [self.get_country_code(c) for c in country]
+        indicators = [indicator] if type(indicator)==str else list(indicator)
+        v_sets = {'country_codes':[country_codes], 'indicators':[indicators]}
+        q_list = [self.make_query(c, i, startYear, endYear, frequency) for c in v_sets['country_codes'] for i in v_sets['indicators']]
+
+        while max(map(len, q_list)) > IMF_API.max_query_size:
+            # Calculate total number of chars in each set
+            c_counts = {k:list(map(lambda x: sum(map(len, x)), v)) for k, v in v_sets.items()}
+
+            # Determine the largest set
+            largest_set_name = max(c_counts, key=lambda x: max(c_counts[x]))
+            largest_set_values_index = np.argmax(c_counts[largest_set_name])
+
+            # Split the largest set and update v_sets
+            largest_set = v_sets[largest_set_name].pop(largest_set_values_index)
+            mid = len(largest_set) // 2
+            v_sets[largest_set_name].extend([largest_set[mid:], largest_set[:mid]])
+
+            # define a new q_list
+            q_list = [self.make_query(c, i, 2005, 2020, 'Q') for c in v_sets['country_codes'] for i in v_sets['indicators']]
+        return q_list
+
+    def get_series(self, indicator, country, startYear, endYear, frequency='A', sleep_time=3):
+        # retrieve queries required to construct the dataset
+        self.queries = self.make_queries(indicator, country, startYear, endYear, frequency)
+
+        # for each query run a for loop
+        data = []
+        country_groups = {}
+        for query in tqdm(self.queries, leave=True, desc = f'Retrieving data from {self.database}'):
+            time.sleep(sleep_time)
+            country_key = re.search(r'IFS/\w\.([\w\+]+)\.([\w\+]+)', query).group(1)
+            query_data = self.get_data(query)
+            if country_key in country_groups:
+                country_groups[country_key].append(query_data)
+            else:
+                country_groups[country_key] = [query_data]
+
+        # merging country based data and then stacking the dataframe on to of each other
+        data = [reduce(lambda x, y: pd.merge(x, y, how='outer', on=['date', 'country']), cg) for cg in country_groups.values()]
+        data = pd.concat(data)
+
         if type(data)!=type(None):
             data.rename(columns={col:self.get_indicator_name(col) for col in data.columns}, inplace=True)
         return data
@@ -128,10 +183,10 @@ class IMF_API():
         lvi = col.last_valid_index()
         return f"{fvi.year}-{lvi.year}" if not pd.isna(fvi) else np.nan
 
-    def search_data_availability(self, search, country, startYear, endYear, frequency='A'):
+    def search_data_availability(self, search, country, startYear, endYear, frequency='A', sleep_time=3):
         if type(search)==str:
             indicator_results = self.indicator_search(search)
-        else: 
+        else:
             indicator_results = pd.DataFrame({"@value":search, '#text':[self.get_indicator_name(i) for i in search]})
         reverse_name_mapping = {v:k for k, v in indicator_results.set_index('@value')['#text'].to_dict().items()}
         countires = [country] if type(country)==str else country
@@ -141,7 +196,7 @@ class IMF_API():
         if len(indicator_results) == 0:
             warnings.warn(f'Search term "{search}" was not found in the {self.database} database.')
             return None
-        dataset = self.get_series(indicator_results['@value'].values, country, startYear, endYear, frequency)
+        dataset = self.get_series(indicator_results['@value'].values, country, startYear, endYear, frequency, sleep_time)
         if type(dataset)==type(None):
             return None
 
@@ -150,7 +205,7 @@ class IMF_API():
         pindex = pd.date_range(start=date_index.min(), end=date_index.max(), freq=freq_mapping[frequency])
         full_index = pd.MultiIndex.from_product([pindex, country_codes], names=['date', 'country'])
         missing_columns = set(indicator_results['#text']) - set(dataset.columns)
-        
+
         # adding back the missing values
         for col in missing_columns:
             dataset[col] = np.NaN
