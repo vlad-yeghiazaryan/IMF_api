@@ -162,7 +162,7 @@ class IMF_API():
         country_groups = {}
         for query in tqdm(self.queries, leave=True, desc = f'Retrieving data from {self.database}'):
             time.sleep(sleep_time)
-            country_key = re.search(r'IFS/\w\.([\w\+]+)\.([\w\+]+)', query).group(1)
+            country_key = re.search(f'{IMF_API.query_method}\/\w+\/\w\.([\w\+]+)\.([\w\+]+)', query).group(1)
             query_data = self.get_data(query)
             if country_key in country_groups:
                 country_groups[country_key].append(query_data)
