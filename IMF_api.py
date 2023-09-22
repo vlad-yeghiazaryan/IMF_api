@@ -94,7 +94,10 @@ class IMF_API():
             return None
         if type(series['Obs'])==dict:
             series['Obs'] = [series['Obs']]
-        data_series = pd.DataFrame(series['Obs']).rename(columns=column_names)[column_names.values()]
+        data_series = pd.DataFrame(series['Obs'])
+        if '@OBS_VALUE' not in data_series.columns:
+            return None
+        data_series = data_series.rename(columns=column_names)[column_names.values()]
         data_series['date'] = self._handle_date_format(data_series['date'], series['@FREQ'])
         data_series[series['@INDICATOR']] = data_series[series['@INDICATOR']].astype('float').copy()
         data_series['country'] = series['@REF_AREA']
