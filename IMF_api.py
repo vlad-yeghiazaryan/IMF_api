@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 import requests
-import time
 import warnings
 
 class IMF_API():
@@ -34,7 +33,6 @@ class IMF_API():
         res = requests.get(query)
         res.raise_for_status()
         dataStructure = pd.DataFrame(res.json()['Structure']['KeyFamilies']['KeyFamily']['Components']['Dimension'])
-        time.sleep(5) # 2 seconds is enough
         dimensions = list(dataStructure['@codelist'])
         
         # extracting code data
@@ -72,11 +70,11 @@ class IMF_API():
     @staticmethod
     def _handle_date_format(dates, freq):
         if freq=='A':
-            dates = pd.to_datetime(dates)
+            dates = pd.to_datetime(dates).copy()
         elif freq=='M':
-            dates = pd.to_datetime(dates)
+            dates = pd.to_datetime(dates).copy()
         elif freq=='Q':
-            dates = pd.PeriodIndex(dates, freq='Q').to_timestamp()
+            dates = pd.PeriodIndex(dates, freq='Q').to_timestamp().copy()
         else:
             warnings.warn(f'Unknown frequency {freq}', UserWarning)
         return dates
@@ -86,8 +84,8 @@ class IMF_API():
         if 'Obs' not in series:
             return None
         data_series = pd.DataFrame(series['Obs']).rename(columns=column_names)[column_names.values()]
-        data_series['date'] = self._handle_date_format(data_series['date'], series['@FREQ'])
-        data_series[series['@INDICATOR']] = data_series[series['@INDICATOR']].astype('float')
+        data_series.loc[:, 'date'] = self._handle_date_format(data_series['date'], series['@FREQ'])
+        data_series.loc[:, series['@INDICATOR']] = data_series[series['@INDICATOR']].astype('float').copy()
         data_series['country'] = series['@REF_AREA']
         data_series = data_series.set_index(['date', 'country'])
         return data_series
@@ -98,7 +96,11 @@ class IMF_API():
             res_text = res.json()['CompactData']['DataSet']
         except:
             res_text = []
-            warnings.warn('Server denied the request.', UserWarning)
+            warning_text = 'Server denied the request.'
+            ql = len(query)
+            if ql > 355:
+                warning_text+= f' The query length of {ql} exceeds the the maximum limit of 355. Please try reducing the number of variables or countries per request.'
+            warnings.warn(warning_text, UserWarning)
         if 'Series' in res_text:
             res_series = res_text['Series']
             if type(res_series)==list:
