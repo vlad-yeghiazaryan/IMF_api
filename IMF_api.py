@@ -179,7 +179,6 @@ class IMF_API():
             data = pd.concat(data)
         else:
             return None
-
         if type(data)!=type(None):
             data.rename(columns={col:self.get_indicator_name(col) for col in data.columns}, inplace=True)
         else:
