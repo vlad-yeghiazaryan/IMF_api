@@ -153,7 +153,7 @@ class IMF_API():
             v_sets[largest_set_name].extend([largest_set[mid:], largest_set[:mid]])
 
             # define a new q_list
-            q_list = [self.make_query(c, i, 2005, 2020, 'Q') for c in v_sets['country_codes'] for i in v_sets['indicators']]
+            q_list = [self.make_query(c, i, startYear, endYear, frequency) for c in v_sets['country_codes'] for i in v_sets['indicators']]
         return q_list
 
     def get_series(self, indicator, country, startYear, endYear, frequency='A', sleep_time=3):
