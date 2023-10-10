@@ -167,17 +167,23 @@ class IMF_API():
             time.sleep(sleep_time)
             country_key = re.search(f'{IMF_API.query_method}\/\w+\/\w\.([\w\+]+)\.([\w\+]+)', query).group(1)
             query_data = self.get_data(query)
-            if country_key in country_groups:
-                country_groups[country_key].append(query_data)
-            else:
-                country_groups[country_key] = [query_data]
+            if type(query_data)!=type(None):
+                if country_key in country_groups:
+                    country_groups[country_key].append(query_data)
+                else:
+                    country_groups[country_key] = [query_data]
 
         # merging country based data and then stacking the dataframe on to of each other
         data = [reduce(lambda x, y: pd.merge(x, y, how='outer', on=['date', 'country']), cg) for cg in country_groups.values()]
-        data = pd.concat(data)
+        if len(data)!=0:
+            data = pd.concat(data)
+        else:
+            return None
 
         if type(data)!=type(None):
             data.rename(columns={col:self.get_indicator_name(col) for col in data.columns}, inplace=True)
+        else:
+            return None
         return data
 
     @staticmethod
