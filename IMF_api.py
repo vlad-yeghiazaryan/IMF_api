@@ -124,6 +124,8 @@ class IMF_API():
                 tables = [pd.concat(d, axis=1) for d in country_data.values() if any(map(lambda x: None if type(x)==type(None) else type(x), d))]
                 if len(tables)!=0:
                     data = pd.concat(tables)
+                else:
+                    return None
             else:
                 data = self.format_series(res_series)
             return data
