@@ -121,7 +121,9 @@ class IMF_API():
                 countries = set([s['@REF_AREA'] for s in res_series])
                 formated_series = [(s['@REF_AREA'], self.format_series(s)) for s in res_series]
                 country_data = {c:[data for name, data in formated_series if name==c] for c in countries}
-                data = pd.concat([pd.concat(d, axis=1) for d in country_data.values() if any(map(lambda x: None if type(x)==type(None) else type(x), d))])
+                tables = [pd.concat(d, axis=1) for d in country_data.values() if any(map(lambda x: None if type(x)==type(None) else type(x), d))]
+                if len(tables)!=0:
+                    data = pd.concat(tables)
             else:
                 data = self.format_series(res_series)
             return data
