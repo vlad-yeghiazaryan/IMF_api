@@ -47,7 +47,13 @@ class IMF_API():
         # extracting code data
         code_urls = [f'{IMF_API.url}/CodeList/{dimension}' for dimension in dimensions]
         code_urls = dict(zip(dataStructure['@conceptRef'], code_urls))
-        codes = {name: r.json()['Structure']['CodeLists']['CodeList']['Code'] for name, url in code_urls.items() if (r := requests.get(url)).ok}
+        codes = {}
+        for name, url in code_urls.items():
+            r = requests.get(url)
+            if r.ok:
+                json_data = r.json()
+                if 'Structure' in json_data:
+                    codes[name] = json_data['Structure']['CodeLists']['CodeList']['Code']
 
         code_list = {}
         for name, code in codes.items():
